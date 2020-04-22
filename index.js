@@ -69,18 +69,20 @@ const token = process.env.TOKEN
 const api = process.env.URL
 const product = process.env.PRODUCT
 const customer = process.env.CUSTOMER
+const order = process.env.ORDER
 const bot = new TelegramBot(token, { polling: true})
 const axios = require('axios')
 
 
 let cart = []
-let total = 0;
+let total = []
 
 bot.onText(/\/start|Hai|Hello|Assalamualaikum/, msg => {
     bot.sendMessage(msg.chat.id, `Hai ${msg.chat.first_name}, selamat datang di toko kami`)
     bot.sendMessage(msg.chat.id, `Silahkan lihat produk kami : /produk`)
     bot.sendMessage(msg.chat.id, `Jika ingin membaca tentang toko kami : /desc`)
     bot.sendMessage(msg.chat.id, `Profil : /saya`)
+    bot.sendMessage(msg.chat.id, `Daftar Belanja : /belanjaan`)
 });
 
 bot.onText(/\/desc/, msg => {
@@ -90,7 +92,7 @@ bot.onText(/\/desc/, msg => {
 bot.onText(/\/saya/, async (msg)=>{
     const id = msg.from.id
     try {
-        const res = await axios.get(api + customer + '/' + id)
+        const res = await axios.get(api + customer + id)
         bot.sendMessage(msg.chat.id, `Profil : \nNama : ${res.data.data.full_name} \nUsername: ${res.data.data.username}\nEmail: ${res.data.data.email}\nNoHP: ${res.data.data.phone_number}.`, {
             parse_mode:'Markdown'
         })
@@ -103,23 +105,23 @@ bot.onText(/\/saya/, async (msg)=>{
 })
 
 bot.onText(/\/register (.+)/, async (msg, data)=>{
-
-    const [full_name,username,email,phone_number] = data[1].split('-')
+    const id = msg.from.id
+    const [namapanjang,username,email,nohp] = data[1].split('-')
     try {
        const response = await axios.post(api + customer,{
            "data": {
                 "attributes": {
-                    "id": msg.from.id,
-                    "full_name": full_name,
+                    "id": id,
+                    "full_name": namapanjang,
                     "username": username,
                     "email": email,
-                    "phone_number": phone_number
+                    "phone_number": nohp
                 }
            }
        })
        bot.sendMessage(msg.chat.id, 'Berhasil')
-    } catch (error) {
-        console.log(error);
+    } catch (err) {
+        console.log(err.message);
         bot.sendMessage(msg.chat.id, ' KLIK : /saya')
     }
 })
@@ -133,8 +135,7 @@ bot.onText(/\/produk/, async (msg)=>{
         data.forEach(el => {
             bot.sendMessage(
               msg.chat.id,
-              `*Nama*: ${el.name}
-        *Harga*: ${el.price}
+              `*Nama*:    ${el.name}\n*Harga*: Rp ${el.price}
         `,{
             "reply_markup": {
                 "inline_keyboard": [
@@ -146,86 +147,58 @@ bot.onText(/\/produk/, async (msg)=>{
                     ],
                 ],
             }, parse_mode:"Markdown"}
-            );
-          });
-        bot.sendMessage(msg.chat.id,' /checkout untuk Melihat belanjaan anda')
+            )
+          })
+          setTimeout(()=>{
+            bot.sendMessage(msg.chat.id,' /belanjaan untuk Melihat belanjaan anda')
+        }, 2000)
+        
     } catch (error) {
         console.log(error);
     }
 })
 
-// bot.on("callback_query", function onCallbackQuery(callbackQuery) {
-//         const action = JSON.parse(callbackQuery.data)
-//         const msg = callbackQuery.message
-//         let x = {
-//             cart: {
-//                 id: action.id,
-//                 action: 'cart'
-//         }
-//     }
-//     const opts = {
-//         chat_id: msg.chat.id,
-//         message_id: msg.message_id,
-//         reply_markup: {
-//             inline_keyboard: [[
-//                 {
-//                     text: "Tambah Ke Keranjang",
-//                     callback_data: JSON.stringify(x.cart)
-//                 }
-//             ]]
-//         }
-//     };
-//     const data = {
-//         chat_id: msg.chat.id,
-//         message_id: msg.message_id,
-//     };
-//     let text;
-	
-// 	axios.get(api + product + action.id)
-// 		.then(response => {
-// 				if (cart.length == 0) {
-// 					cart.push({
-// 						name: response.data.data.name,
-// 						price: response.data.data.price,
-// 						quantity: 1
-// 					});
-// 					text = `Product berhasil ditambahkan ke keranjang, 
-// Silahkan cek keranjang belanja anda /checkout`;
-// 					bot.editMessageText(text, data);
-// 				}
-// 				else {
-// 					let i = cart.findIndex(el => el.name == response.data.data.name);
-// 					if (i != -1) {
-// 						cart[i].quantity += 1;
-//                         text = `Product berhasil ditambahkan ke keranjang, 
-// Silahkan cek keranjang belanja anda /checkout`;
-// 						bot.editMessageText(text, data);
-// 					}
-// 					else {
-// 						cart.push({
-// 							name: response.data.data.name,
-// 							price: response.data.data.price,
-// 							quantity: 1
-// 						});
-//                         text = `Product berhasil ditambahkan ke keranjang, 
-// Silahkan cek keranjang belanja anda /checkout`;
-// 						bot.editMessageText(text, data);
-						
-// 					}
-// 				}
-// 		})
-// 		.catch(err => {
-// 			console.log(err.message);
-// 		});
-// });
+bot.on("callback_query", function onCallbackQuery(callback) {
+    const action = parseInt(callback.data)
+    const msg = callback.message
+    const [nama,harga] = callback.message.text.split('\n')
+    const name = nama.replace('Nama:   ','')
+    const price = harga.replace('Harga: Rp ','')
+    const newPrice = parseInt(price)
 
-bot.onText(/\/checkout/,  (msg)=>{
-    let data = JSON.stringify(cart)
-    for (let i = 0; i < cart.length; i++) {
-        total+= cart[i].quantity * cart[i].price
+    const opts = {
+        chat_id: msg.chat.id,
+        message_id: msg.message_id,
+        parse_mode:'markdown'
+      };
+    const list = {
+        "product_id": action,
+        "name": name,
+        "price": newPrice,
+        "quantity": 1
     }
-    bot.sendMessage(msg.chat.id, `Berikut Ini List Belanjaan kamu :  
-*${data}* 
-Total Belanja Kamu Sebesar Rp. *${total}*`, { parse_mode: "Markdown" }
-    )
+   cart.push(list)
+   bot.editMessageText(`${name} ditambahkan ke keranjang`, opts)
+});
+bot.onText(/\/belanjaan/, async (msg)=>{
+    const id = msg.from.id
+    try {
+        const res = await axios.get(api + customer + id )
+        const data_user = res.data
+            if(cart.length>0){
+                let total = []
+                cart.forEach(el => {
+                    total.push(el.quantity*el.price)
+                });
+                bot.sendMessage(msg.chat.id, `Didalam keranjang anda`)
+                cart.forEach((el) => {
+                    bot.sendMessage(msg.chat.id, `- ${el.name}\nRp. ${el.price*el.quantity}`)
+                })
+                cart = []
+            }else{
+                bot.sendMessage(msg.chat.id, 'Keranjang Kosong')
+            }
+    } catch (err) {
+        console.log(err.message)
+    }
 })
